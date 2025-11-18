@@ -1,0 +1,60 @@
+{
+  "Comment": "Workflow for investigating and resolving a fraud case.",
+  "StartAt": "CollectCaseData",
+  "States": {
+    "CollectCaseData": {
+      "Type": "Task",
+      "Comment": "Gather all relevant data for the case, including the SHAP report.",
+      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:DataCollectorFunction",
+      "Parameters": {
+        "CaseId.$": "$.body.caseId"
+      },
+      "Next": "WaitForManualReview",
+      "Catch": [
+        {
+          "ErrorEquals": [ "States.ALL" ],
+          "Next": "InvestigationFailed"
+        }
+      ]
+    },
+    "WaitForManualReview": {
+      "Type": "Wait",
+      "Comment": "Simulates an analyst reviewing the case. In a real system, this would be a callback pattern.",
+      "Seconds": 7200,
+      "Next": "CheckReviewOutcome"
+    },
+    "CheckReviewOutcome": {
+      "Type": "Choice",
+      "Comment": "Checks if the analyst confirmed fraud or marked it as a false positive.",
+      "Choices": [
+        {
+          "Variable": "$.review.outcome",
+          "StringEquals": "CONFIRMED_FRAUD",
+          "Next": "AddToBlacklist"
+        }
+      ],
+      "Default": "MarkAsFalsePositive"
+    },
+    "AddToBlacklist": {
+      "Type": "Task",
+      "Comment": "Adds the user/attributes to a blacklist and updates the fraud graph.",
+      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:UpdateBlacklistFunction",
+      "Next": "CloseCase"
+    },
+    "MarkAsFalsePositive": {
+      "Type": "Task",
+      "Comment": "Marks the case as a false positive for model retraining.",
+      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:MarkFalsePositiveFunction",
+      "Next": "CloseCase"
+    },
+    "CloseCase": {
+      "Type": "Succeed",
+      "Comment": "The investigation process is complete."
+    },
+    "InvestigationFailed": {
+      "Type": "Fail",
+      "Cause": "The investigation workflow failed.",
+      "Error": "InvestigationError"
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "FraudRouterLambdaPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "kinesis:GetRecords",
+        "kinesis:GetShardIterator",
+        "kinesis:DescribeStream",
+        "kinesis:ListShards",
+        "dynamodb:Query",
+        "dynamodb:UpdateItem",
+        "dynamodb:PutItem",
+        "s3:GetObject",
+        "sns:Publish",
+        "sqs:SendMessage",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:kinesis:us-east-1:ACCOUNT_ID:stream/fraud-detection-stream",
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/UserProfileTable",
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/UserGraphTable",
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/FraudCasesTable",
+        "arn:aws:s3:::your-unique-bucket-name-fraud-detection/models/*",
+        "arn:aws:sns:us-east-1:ACCOUNT_ID:fraud-alerts-topic",
+        "arn:aws:sqs:us-east-1:ACCOUNT_ID:fraud-cases-queue"
+      ]
+    },
+    {
+      "Sid": "ExplainerLambdaPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:UpdateItem",
+        "s3:PutObject",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/FraudCasesTable",
+        "arn:aws:s3:::your-unique-bucket-name-fraud-detection/explainability-reports/*"
+      ]
+    },
+    {
+      "Sid": "FirehoseDeliveryRolePolicy",
+      "Effect": "Allow",
+      "Action": [
+        "kinesis:DescribeStream",
+        "kinesis:GetRecords",
+        "kinesis:GetShardIterator",
+        "s3:PutObject",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:kinesis:us-east-1:ACCOUNT_ID:stream/fraud-detection-stream",
+        "arn:aws:s3:::your-unique-bucket-name-fraud-detection/*"
+      ]
+    }
+  ]
+}
