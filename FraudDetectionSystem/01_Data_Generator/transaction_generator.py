@@ -1,28 +1,36 @@
 # transaction_generator.py
-# Simula transacciones bancarias en tiempo real con patrones de fraude.
+# Simula transacciones bancarias en tiempo real con patrones de fraude (SQS Version).
 
 import boto3
 import json
-import random
 import time
-from datetime import datetime, timedelta
+import random
 import uuid
+import os
+from datetime import datetime
 
 # --- Configuration ---
-# ¡IMPORTANTE! Asegúrate de que este nombre coincida con el creado en AWS CLI.
-STREAM_NAME = "FraudTransactionsStream" 
-AWS_REGION = "us-east-1" 
-# Probabilidad base de que una transacción sea catalogada como Fraude (5%)
-BASE_FRAUD_PROBABILITY = 0.05 
-
-# Initialize the Kinesis client
 try:
-    # Usar el perfil 'default' configurado en la CLI
-    kinesis_client = boto3.client('kinesis', region_name=AWS_REGION)
-    print("Conexión a Kinesis exitosa. Generando transacciones...")
+    # Ajustamos la ruta para buscar el archivo de configuración
+    config_path = "../../infra_config.json"
+    if not os.path.exists(config_path):
+        config_path = "infra_config.json" # Intentar en el directorio actual
+        
+    with open(config_path, "r") as f:
+        config = json.load(f)
+        QUEUE_URL = config["QUEUE_URL"]
+        AWS_REGION = config["AWS_REGION"]
+except FileNotFoundError:
+    print("❌ Error: infra_config.json no encontrado. Ejecuta 'setup_infrastructure.py' primero.")
+    import sys
+    sys.exit()
+
+# Initialize SQS Client
+try:
+    sqs_client = boto3.client('sqs', region_name=AWS_REGION)
+    print(f"Conexión a SQS exitosa. URL: {QUEUE_URL}")
 except Exception as e:
-    print(f"Error al conectar a Kinesis. Revisa tu 'aws configure': {e}")
-    # Usamos sys.exit() para parar la ejecución si no podemos conectar.
+    print(f"Error al conectar a SQS. Revisa tu 'aws configure': {e}")
     import sys
     sys.exit()
 
@@ -39,6 +47,7 @@ DRIFT_GEO_LOCATION = {"lat": (40.5, 41.0), "lon": (-74.0, -73.5)} # New York (US
 # IPs y Tarjetas (para simular reglas de Blacklist/Grafos)
 BLACKLIST_IP = "10.10.10.10"
 BLACKLIST_CARD = "4000123456789012"
+BASE_FRAUD_PROBABILITY = 0.20  # 20% chance of random fraud
 
 def generate_transaction(user_id, amount_range, geo_location, is_drift_scenario=False):
     """Genera un registro de transacción con lógica de fraude."""
@@ -79,24 +88,29 @@ def generate_transaction(user_id, amount_range, geo_location, is_drift_scenario=
     
     return record
 
-def send_to_kinesis(transaction_record):
-    """Envía el registro JSON al stream Kinesis especificado."""
+def send_to_sqs(transaction_record):
+    """Envía el registro JSON a la cola SQS especificada."""
+    # Prepare arguments
+    send_args = {
+        'QueueUrl': QUEUE_URL,
+        'MessageBody': json.dumps(transaction_record)
+    }
+    
+    # Only add MessageGroupId if it's a FIFO queue
+    if '.fifo' in QUEUE_URL:
+        send_args['MessageGroupId'] = "fraud_transactions"
+
     try:
-        kinesis_client.put_record(
-            StreamName=STREAM_NAME,
-            Data=json.dumps(transaction_record).encode('utf-8'), # Codificar a bytes
-            PartitionKey=transaction_record["userId"] # Clave para asegurar el orden por usuario
-        )
+        sqs_client.send_message(**send_args)
         return True
     except Exception as e:
-        # Esto imprimirá un error si el stream no existe o si las credenciales fallan
-        print(f"Error al enviar registro a Kinesis: {e}")
+        print(f"Error al enviar registro a SQS: {e}")
         return False
 
 def main():
     """Bucle principal para generar y enviar transacciones."""
     start_time = time.time()
-    print(f"Comenzando el envío al stream '{STREAM_NAME}'...")
+    print(f"Comenzando el envío a la cola SQS...")
 
     while True:
         elapsed_time_minutes = (time.time() - start_time) / 60
@@ -120,7 +134,7 @@ def main():
         # Generar y enviar la transacción
         transaction = generate_transaction(current_user, current_amount_range, current_geo, is_drift)
 
-        if send_to_kinesis(transaction):
+        if send_to_sqs(transaction):
             status = "FRAUDE SIMULADO" if transaction['isFraud'] else "LEGÍTIMA"
             print(f"Enviado {status} | User: {transaction['userId']} | Monto: {transaction['amount']} | Geo: {current_geo['lat'][0]:.1f}{drift_message}")
         

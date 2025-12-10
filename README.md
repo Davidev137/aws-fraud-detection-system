@@ -1,44 +1,84 @@
-## Amazon Fraud Detector Samples 
+# Sistema de Detección de Fraude en Tiempo Real con AWS (Edición SQS)
 
+![AWS](https://img.shields.io/badge/AWS-Serverless-orange)
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![Status](https://img.shields.io/badge/Status-Portfolio%20Ready-green)
 
-[Amazon Fraud Detector](https://aws.amazon.com/fraud-detector/) is a fully managed service that makes it easy to identify potentially fraudulent online activities such as online payment fraud and the creation of fake accounts. This repository contains a collection of example AWS solutions and Jupyter notebooks that interact with the Amazon Fraud Detector APIs. For more videos, blogs, and tutorials about Amazon Fraud Detector, refer to [Amazon Fraud Detector resource](https://aws.amazon.com/fraud-detector/resources/?blog-posts-cards.sort-by=item.additionalFields.createdDate&blog-posts-cards.sort-order=desc). 
+Un pipeline de datos completo para detectar transacciones financieras fraudulentas en tiempo real, optimizado para bajo costo y simplicidad.
 
-#### Sample Notebooks
+## 🏗️ Arquitectura
 
-- Fraud_Detector_End_to_End_External_Data_OFI.ipynb, provides an example of building a detector using Amazon Fraud Detector’s APIs for Online Fraud Inisights (OFI) model type using external data sets. 
+El sistema utiliza una arquitectura desacoplada diseñada para fiabilidad y facilidad de pruebas:
 
-- Fraud_Detector_End_to_End_Stored_Data.ipynb, provides an example of building a detector using Amazon Fraud Detector’s APIs for Transaction Fraud Inisights (TFI) or Online Fraud Inisights (OFI) model type using data stored in Amazon Fraud Detector.  
+1.  **Ingesta de Datos**: `AWS SQS` (Simple Queue Service) almacena temporalmente el alto volumen de transacciones.
+2.  **Procesamiento**: `fraud_detector_service.py` (Lambda Local) procesa transacciones, realiza ingeniería de características y verificaciones de fraude usando modelos de ML.
+3.  **Almacenamiento**: `DynamoDB` guarda perfiles de usuario y casos de fraude detectados.
+4.  **Visualización**: El dashboard de `Streamlit` provee monitoreo en tiempo real del fraude detectado.
 
-- Fraud_Detector_End_to_End_ATI.ipynb, provides an example of building a detector using Amazon Fraud Detector’s APIs for Account Takeover Inisights (ATI) model type using data stored in Amazon Fraud Detector. Sample dataset is available under ```data``` folder. 
+## 🚀 Características Clave
 
-- Fraud_Detector_Send_Event.ipynb, provides an example of calling Amazon Fraud Detector's SendEvent API. 
-  
-- Fraud_Detector_GetEventPrediction_API_example.ipynb, provides an example of calling Amazon Fraud Detector’s event prediction API.  
+*   **Detección en Tiempo Real**: Latencia < 1 segundo.
+*   **Machine Learning**: Usa modelos XGBoost (Campeón/Retador) para predecir la probabilidad de fraude.
+*   **Costo Optimizado**: Usa colas SQS Estándar y DynamoDB bajo demanda para mantenerse dentro del AWS Free Tier.
+*   **Infraestructura como Código**: Scripts de Python usando `boto3` para aprovisionar toda la pila tecnológica.
 
-- Fraud_Detector_BatchPrediction_API_Example.ipynb, provides an example of working with Amazon Fraud Detector's batch prediction API.
+## 🛠️ Requisitos Previos
 
-- AFD-Sagemaker-Model-Example.ipynb, provides an exmaple of training a sagemaker model, import to Amazon Fraud Detector and test.
+*   **AWS CLI**: Instalado y configurado (`aws configure`).
+*   **Python 3.13+**: (Referenciado en `.venv`).
+*   **Entorno Virtual**: Activado o accesible vía `.venv\Scripts\python.exe`.
 
-#### Automated Data Profiler
+## 🏁 Guía de Ejecución (Paso a Paso)
 
-The profiler generates an intuitive and comprehensive report of your dataset, including variable statistics, label distribution, categorical and numeric analysis, and even variable&label correlations. It provides guidance on variable types as well as an option to transform the dataset into the format in compliance with AFD. Refer to [this blog post](https://aws.amazon.com/blogs/machine-learning/train-models-faster-with-an-automated-data-profiler-for-amazon-fraud-detector/) for more information. 
+Sigue estos pasos para ejecutar el sistema completo.
 
-To use it, follow steps below:
+### 1. Preparar Entorno e Infraestructura
+Primero, asegura que las dependencias estén instaladas y los recursos de AWS existan.
 
-1. Open the [CloudFormation quick launch link.](https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?templateURL=https://amazon-frauddetector-cfn-templates.s3.amazonaws.com/AFD_Data_Cleaner/afd_data_analyzer_cfn_template.yaml)
-2. Fill in the parameters including: path to your CSV file in S3, some header names, and options. 
-3. Click create stack. 
-4. Wait a few minutes and open your S3 folder with your CSV file (e.g. myfile.csv). The profiling report is under folder /afd_data_myfile/report.html. 
+```powershell
+# Instalar librerías
+.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-#### Sample Data Sets
+# Crear Cola SQS y Tablas DynamoDB
+.venv\Scripts\python.exe setup_infrastructure.py
 
-- data folder, provides sample data sets for OFI and TFI model types. 
-  - registration_data_20K_full.csv and registration_data_20K_minimum.csv, provide sample data sets for OFI. 
-  - transaction_data_100K_full.csv, provides sample data set for TFI. 
-  - ato_data_800K_full.csv.zip, provides sample data set for ATI. Download and unzip to get the CSV data. 
+# Generar Modelos de ML (si faltan)
+.venv\Scripts\python.exe FraudDetectionSystem/03_ML_Model/train_models.py
+```
 
-## License
+### 2. Ejecutar el Sistema (El Método de 3 Terminales)
+Necesitas abrir **3 terminales separadas** para simular un ambiente de microservicios real.
 
-This library is licensed under the MIT-0 License. See the LICENSE file.
+#### Terminal 1: Servicio Detector de Fraude 🧠
+Este servicio escucha la Cola SQS, carga los modelos de ML y procesa las transacciones entrantes.
+```powershell
+.venv\Scripts\python.exe FraudDetectionSystem/02_Lambda_Processor/fraud_detector_service.py
+```
+*Espera hasta ver: "🎧 Listening to SQS Queue..."*
 
+#### Terminal 2: Generador de Transacciones 💳
+Este script simula el comportamiento de compra de usuarios. Inyecta transacciones legítimas y fraude ocasional (tasa del 20%).
+```powershell
+.venv\Scripts\python.exe FraudDetectionSystem/01_Data_Generator/transaction_generator.py
+```
+*Verás: "Enviado LEGÍTIMA" o "Enviado FRAUDE SIMULADO"*
 
+#### Terminal 3: Dashboard de Visualización 📊
+Visualización en tiempo real de los casos de fraude detectados.
+```powershell
+.venv\Scripts\python.exe -m streamlit run dashboard.py
+```
+*Esto abrirá tu navegador predeterminado en http://localhost:8501*
+
+## ⚠️ Limpieza (Teardown)
+Para evitar costos, borra los recursos cuando termines.
+```powershell
+.venv\Scripts\python.exe teardown_infrastructure.py
+```
+
+## 📂 Estructura del Proyecto
+*   `setup_infrastructure.py`: Aprovisionamiento de infraestructura.
+*   `FraudDetectionSystem/01_Data_Generator/`: Simulación de tráfico.
+*   `FraudDetectionSystem/02_Lambda_Processor/`: Lógica central y consumidor SQS.
+*   `FraudDetectionSystem/03_ML_Model/`: Scripts de entrenamiento y artefactos de modelos.
+*   `dashboard.py`: Frontend en Streamlit.

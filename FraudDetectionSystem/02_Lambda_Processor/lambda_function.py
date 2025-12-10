@@ -16,16 +16,16 @@ from graph_logic.graph_queries import is_linked_to_fraud
 # --- Environment & AWS Clients ---
 # These would be set in the Lambda environment variables
 USER_PROFILE_TABLE = os.environ.get("USER_PROFILE_TABLE", "UserProfileTable")
+FRAUD_CASES_TABLE = os.environ.get("FRAUD_CASES_TABLE", "FraudCasesTable")
 CHAMPION_MODEL_PATH = "champion/model_v1.joblib"
 CHALLENGER_MODEL_PATH = "challenger/model_v2.joblib"
 SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:ACCOUNT_ID:fraud-alerts-topic")
-SQS_QUEUE_URL = os.environ.get("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/ACCOUNT_ID/fraud-cases-queue")
 
 # Initialize clients
 dynamodb = boto3.resource('dynamodb')
 sns = boto3.client('sns')
-sqs = boto3.client('sqs')
 user_profile_table = dynamodb.Table(USER_PROFILE_TABLE)
+fraud_cases_table = dynamodb.Table(FRAUD_CASES_TABLE)
 
 # --- Model Loading ---
 # Load models into memory outside the handler for reuse across invocations (Lambda optimization)
@@ -92,8 +92,8 @@ def lambda_handler(event, context):
 
     for record in event['Records']:
         try:
-            payload_b64 = record['kinesis']['data']
-            payload = json.loads(base64.b64decode(payload_b64))
+            # SQS payload is in 'body', often as a JSON string
+            payload = json.loads(record['body'])
             print(f"Processing transaction: {payload['transactionId']}")
 
             # 1. Feature Engineering
@@ -119,10 +119,17 @@ def lambda_handler(event, context):
 
             if final_decision_is_fraud:
                 # 5a. Fraud Actions
-                # Send to SQS for Step Functions workflow
-                sqs.send_message(
-                    QueueUrl=SQS_QUEUE_URL,
-                    MessageBody=json.dumps(payload, default=str)
+                # Write to FraudCasesTable
+                fraud_cases_table.put_item(
+                    Item={
+                        'caseId': payload['transactionId'],
+                        'userId': payload['userId'],
+                        'timestamp': payload['timestamp'],
+                        'amount': Decimal(str(payload['amount'])),
+                        'reason': 'High Risk Score',
+                        'model_version': model_version,
+                        'confidence': Decimal(str(confidence))
+                    }
                 )
                 # Send alert to SNS
                 sns.publish(

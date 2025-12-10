@@ -7,10 +7,25 @@ import pandas as pd
 import time
 
 # --- AWS & Athena Configuration ---
-ATHENA_DATABASE = "fraud_detection_db"
-ATHENA_OUTPUT_LOCATION = "s3://your-unique-bucket-name-fraud-detection/athena-query-results/"
+import json
+import os
+
+# --- Configuration ---
+try:
+    with open("../../infra_config.json", "r") as f:
+        config = json.load(f)
+        BUCKET_NAME = config["BUCKET_NAME"]
+        ATHENA_DATABASE = config.get("ATHENA_DB", "fraud_detection_db")
+        ATHENA_OUTPUT_LOCATION = config.get("ATHENA_OUTPUT", f"s3://{BUCKET_NAME}/athena-query-results/")
+except FileNotFoundError:
+    # Fallback or error
+    st.error("Configuration file 'infra_config.json' not found. Run 'setup_infrastructure.py' first.")
+    BUCKET_NAME = "your-unique-bucket-name-fraud-detection"
+    ATHENA_DATABASE = "fraud_detection_db"
+    ATHENA_OUTPUT_LOCATION = f"s3://{BUCKET_NAME}/athena-query-results/"
+
 # This is the S3 path where Firehose stores the raw transaction data
-S3_DATA_PATH = "s3://your-unique-bucket-name-fraud-detection/transactions/raw/"
+S3_DATA_PATH = f"s3://{BUCKET_NAME}/transactions/raw/"
 
 # Initialize boto3 client for Athena
 # Note: You need to have your AWS credentials configured locally for this to work.
